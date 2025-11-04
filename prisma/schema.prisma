@@ -1,0 +1,540 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// AUTHENTICATION & USER MANAGEMENT
+// ========================================
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  TEAM_MEMBER
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?
+  role          UserRole  @default(TEAM_MEMBER)
+  status        UserStatus @default(ACTIVE)
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  organization  Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  // Activity
+  createdProjects Project[] @relation("CreatedBy")
+  assignedTasks   Task[] @relation("AssignedTo")
+  createdTasks    Task[] @relation("CreatedBy")
+  timeEntries     TimeEntry[]
+  comments        Comment[]
+  activities      Activity[]
+  notifications   Notification[]
+
+  // Audit
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ========================================
+// ORGANIZATION
+// ========================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  website     String?
+  description String?  @db.Text
+
+  // Settings
+  settings    Json?
+
+  // Relations
+  users       User[]
+  clients     Client[]
+  projects    Project[]
+  invoices    Invoice[]
+  expenses    Expense[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([slug])
+}
+
+// ========================================
+// CLIENT MANAGEMENT
+// ========================================
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+}
+
+model Client {
+  id              String       @id @default(cuid())
+  name            String
+  email           String
+  phone           String?
+  company         String?
+  website         String?
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  postalCode      String?
+  status          ClientStatus @default(ACTIVE)
+  notes           String?      @db.Text
+
+  // Relations
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  organizationId  String
+  projects        Project[]
+  invoices        Invoice[]
+  contacts        ClientContact[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+}
+
+model ClientContact {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  position    String?
+  isPrimary   Boolean  @default(false)
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId    String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+// ========================================
+// PROJECT MANAGEMENT
+// ========================================
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Project {
+  id              String          @id @default(cuid())
+  name            String
+  description     String?         @db.Text
+  status          ProjectStatus   @default(PLANNING)
+  priority        ProjectPriority @default(MEDIUM)
+
+  // Dates
+  startDate       DateTime?
+  endDate         DateTime?
+  deadline        DateTime?
+
+  // Budget
+  budget          Float?
+  hourlyRate      Float?
+
+  // Relations
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  organizationId  String
+  client          Client       @relation(fields: [clientId], references: [id])
+  clientId        String
+  createdBy       User         @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById     String
+
+  tasks           Task[]
+  timeEntries     TimeEntry[]
+  files           File[]
+  milestones      Milestone[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([status])
+  @@index([createdById])
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  dueDate     DateTime
+  isCompleted Boolean  @default(false)
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+// ========================================
+// TASK MANAGEMENT
+// ========================================
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id              String       @id @default(cuid())
+  title           String
+  description     String?      @db.Text
+  status          TaskStatus   @default(TODO)
+  priority        TaskPriority @default(MEDIUM)
+
+  // Dates
+  startDate       DateTime?
+  dueDate         DateTime?
+  completedAt     DateTime?
+
+  // Estimates
+  estimatedHours  Float?
+
+  // Position for Kanban
+  position        Int          @default(0)
+
+  // Relations
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId       String
+  assignedTo      User?        @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedToId    String?
+  createdBy       User         @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById     String
+
+  timeEntries     TimeEntry[]
+  comments        Comment[]
+  files           File[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([createdById])
+}
+
+// ========================================
+// TIME TRACKING
+// ========================================
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  description String?   @db.Text
+  hours       Float
+  date        DateTime  @default(now())
+  billable    Boolean   @default(true)
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskId      String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([date])
+}
+
+// ========================================
+// FINANCIAL MANAGEMENT
+// ========================================
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String        @unique
+  status          InvoiceStatus @default(DRAFT)
+
+  // Dates
+  issueDate       DateTime      @default(now())
+  dueDate         DateTime
+  paidDate        DateTime?
+
+  // Amounts
+  subtotal        Float
+  tax             Float         @default(0)
+  discount        Float         @default(0)
+  total           Float
+
+  // Notes
+  notes           String?       @db.Text
+  terms           String?       @db.Text
+
+  // Relations
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  organizationId  String
+  client          Client        @relation(fields: [clientId], references: [id])
+  clientId        String
+  items           InvoiceItem[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([status])
+  @@index([invoiceNumber])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  description String
+  quantity    Float
+  rate        Float
+  amount      Float
+
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([invoiceId])
+}
+
+enum ExpenseCategory {
+  TRAVEL
+  EQUIPMENT
+  SOFTWARE
+  MARKETING
+  OFFICE
+  OTHER
+}
+
+model Expense {
+  id              String          @id @default(cuid())
+  description     String
+  amount          Float
+  category        ExpenseCategory
+  date            DateTime        @default(now())
+  receipt         String?
+  notes           String?         @db.Text
+  billable        Boolean         @default(false)
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  organizationId  String
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([date])
+}
+
+// ========================================
+// FILE MANAGEMENT
+// ========================================
+
+model File {
+  id          String   @id @default(cuid())
+  name        String
+  key         String   // Storage key/path
+  url         String
+  size        Int
+  mimeType    String
+
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String?
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId      String?
+
+  uploadedAt  DateTime @default(now())
+
+  @@index([projectId])
+  @@index([taskId])
+}
+
+// ========================================
+// COMMUNICATION
+// ========================================
+
+model Comment {
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId      String
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([userId])
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_COMPLETED
+  COMMENT_ADDED
+  PROJECT_UPDATED
+  INVOICE_SENT
+  INVOICE_PAID
+  DEADLINE_REMINDER
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String           @db.Text
+  read        Boolean          @default(false)
+  link        String?
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+
+  createdAt   DateTime         @default(now())
+
+  @@index([userId])
+  @@index([read])
+}
+
+// ========================================
+// ACTIVITY LOG
+// ========================================
+
+enum ActivityType {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_COMPLETED
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_COMPLETED
+  COMMENT_ADDED
+  FILE_UPLOADED
+  INVOICE_CREATED
+  INVOICE_SENT
+  TIME_LOGGED
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  type        ActivityType
+  description String
+  metadata    Json?
+
+  user        User         @relation(fields: [userId], references: [id])
+  userId      String
+
+  createdAt   DateTime     @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
