@@ -5,7 +5,7 @@ import GoogleProvider from 'next-auth/providers/google';
 import { compare } from 'bcryptjs';
 import { db } from '@/lib/db';
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(db),
   session: {
     strategy: 'jwt',
@@ -86,3 +86,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
 });
+
+export { signIn, signOut, auth };
+export const { GET, POST } = handlers;
