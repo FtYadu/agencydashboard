@@ -6,7 +6,7 @@ import { compare } from 'bcryptjs';
 import { db } from '@/lib/db';
 
 const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: PrismaAdapter(db),
+  adapter: PrismaAdapter(db) as any,
   session: {
     strategy: 'jwt',
   },
@@ -30,9 +30,12 @@ const { handlers, signIn, signOut, auth } = NextAuth({
           throw new Error('Invalid credentials');
         }
 
+        const email = credentials.email as string;
+        const password = credentials.password as string;
+
         const user = await db.user.findUnique({
           where: {
-            email: credentials.email,
+            email,
           },
         });
 
@@ -40,10 +43,7 @@ const { handlers, signIn, signOut, auth } = NextAuth({
           throw new Error('Invalid credentials');
         }
 
-        const isCorrectPassword = await compare(
-          credentials.password,
-          user.password
-        );
+        const isCorrectPassword = await compare(password, user.password);
 
         if (!isCorrectPassword) {
           throw new Error('Invalid credentials');
@@ -79,7 +79,7 @@ const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.role = token.role as any;
       }
 
       return session;

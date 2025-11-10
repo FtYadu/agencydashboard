@@ -139,7 +139,7 @@ enum ClientStatus {
 model Client {
   id              String       @id @default(cuid())
   name            String
-  email           String
+  email           String       @unique
   phone           String?
   company         String?
   website         String?
@@ -162,7 +162,6 @@ model Client {
   updatedAt       DateTime @updatedAt
 
   @@index([organizationId])
-  @@index([email])
   @@index([status])
 }
 

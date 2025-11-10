@@ -82,10 +82,10 @@ export function TaskDialog({ open, onClose, task }: TaskDialogProps) {
         projectId: task.projectId,
         assignedToId: task.assignedToId || undefined,
         startDate: task.startDate
-          ? new Date(task.startDate).toISOString().split('T')[0]
+          ? (new Date(task.startDate).toISOString().split('T')[0] as any)
           : undefined,
         dueDate: task.dueDate
-          ? new Date(task.dueDate).toISOString().split('T')[0]
+          ? (new Date(task.dueDate).toISOString().split('T')[0] as any)
           : undefined,
         estimatedHours: task.estimatedHours || undefined,
       });
